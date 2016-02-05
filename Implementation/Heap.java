@@ -10,7 +10,7 @@ public class Heap<T extends Comparable<T>> {
 			p.insert(tests[i]);
 		}
 		
-		for(int i=0 ; i<p.size() ; i++){
+		for(int i=0 ; i<tests.length ; i++){
 			int max = p.delete();
 			System.out.print(max + " ");
 		}
