@@ -1,5 +1,3 @@
-
-	
 public class Request{
 	private int toFloor;
 	public Request(int t){
