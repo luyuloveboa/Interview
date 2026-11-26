@@ -1,0 +1,33 @@
+{
+  "name": "glyph",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Text-to-image render service: text + TTF font in, PNG out.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "render": "tsx src/cli.ts",
+    "start": "tsx src/server/index.ts",
+    "loadtest": "tsx scripts/loadtest.ts",
+    "dev": "tsx src/server/index.ts"
+  },
+  "dependencies": {
+    "@fastify/multipart": "^10.1.9",
+    "@fastify/rate-limit": "^11.3.0",
+    "fastify": "^5.12.8",
+    "opentype.js": "^2.0.0",
+    "piscina": "^5.3.2"
+  },
+  "devDependencies": {
+    "@types/autocannon": "^7.12.7",
+    "@types/node": "^26.6.6",
+    "@types/pngjs": "^6.0.5",
+    "autocannon": "^9.0.0",
+    "pngjs": "^7.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.1"
+  }
+}
