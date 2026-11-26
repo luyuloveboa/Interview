@@ -4,6 +4,8 @@
     { "type": "java", "name": "All tests", "request": "launch", "mainClass": "AllTests" },
     { "type": "java", "name": "Plant disease tests", "request": "launch", "mainClass": "plantdisease.PlantDiseaseTest" },
     { "type": "java", "name": "GPU credit tests", "request": "launch", "mainClass": "gpucredit.CreditSystemTest" },
-    { "type": "java", "name": "Rectangle board tests", "request": "launch", "mainClass": "rectangleboard.RectangleBoardTest" }
+    { "type": "java", "name": "Rectangle board tests", "request": "launch", "mainClass": "rectangleboard.RectangleBoardTest" },
+    { "type": "java", "name": "Cluster mode tests", "request": "launch", "mainClass": "clustermode.ClusterModeTest" },
+    { "type": "java", "name": "Bootloader tests", "request": "launch", "mainClass": "bootloader.BootloaderTest" }
   ]
 }

@@ -32,6 +32,7 @@ public class PlantDiseaseTest {
         fu1("spread routes around an immune column", "1,2,0|0,2,0|0,0,0", 1, 4);
         fu1("immune cells do not count as infected", "1,2,1|0,0,0", 3, 0);
         fu1("no immune cells behaves like base", "1,0,0,0,0", 1, 4);
+        fu1("detour around an immune wall", "1,0,0|2,2,0|0,0,0", 1, 4);
 
         Check.section("Plant disease: FU2 (recovery)");
         fu2("ex1", "1,0,0|0,0,0|0,0,0", 1, 2, 4);
@@ -56,6 +57,9 @@ public class PlantDiseaseTest {
         fu3("below death threshold everyone recovers", "1,0", 1, 2, 2, new int[]{3, 0});
         fu3("cell infected by two neighbors dies", "1,0,1", 1, 1, 2, new int[]{2, 1});
         fu3("nothing infected", "0,0|0,0", 1, 1, 1, new int[]{0, 0});
+        fu3("every cell infected along a row dies", "1,0,0,0,0", 1, 2, 1, new int[]{6, 4});
+        fu3("only the middle seed has 2 infected neighbors", "1,1,1", 1, 1, 2, new int[]{1, 1});
+        fu3("seeds recovering that same day still count as infected neighbors", "0,0,0|0,1,1", 2, 1, 2, new int[]{2, 2});
 
         Check.section("Plant disease: FU4 (firebreak)");
         fu4("ex1", "1,0,0|0,0,0|0,0,1", 1, 1, 1, 4);
@@ -65,6 +69,9 @@ public class PlantDiseaseTest {
         fu4("nothing infected", "0,0|0,0", 1, 1, 1, 0);
         fu4("burning the middle column separates the seeds", "1,0,1", 1, 1, 2, 0);
         fu4("2x2 block: best burn still leaves 2 deaths", "1,1|1,1", 1, 1, 1, 2);
+        fu4("burn next to a lone seed", "1,0,0,0,0", 1, 1, 1, 0);
+        fu4("3x3 all infected: burning the middle row saves 3", "1,1,1|1,1,1|1,1,1", 1, 1, 1, 6);
+        fu4("death threshold too high: nobody dies", "1,1,1|1,1,1|1,1,1", 1, 1, 9, 0);
 
         randomVsBruteForce();
     }
