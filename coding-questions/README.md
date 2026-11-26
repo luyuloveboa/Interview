@@ -69,7 +69,7 @@ coding-questions/
 全部通过时最后一行是：
 
 ```
-ALL PASSED (231 checks)
+ALL PASSED (232 checks)
 ```
 
 有失败的话会打印 `FAIL <名字>: got ..., expected ...`，退出码为 1。
