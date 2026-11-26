@@ -1,0 +1,1 @@
+{"configurations":[{"mainClass":"AllTests","name":"All tests","request":"launch","type":"java"},{"mainClass":"parallelsum.ParallelSumTest","name":"Parallel sum tests","request":"launch","type":"java"}],"version":"0.2.0"}

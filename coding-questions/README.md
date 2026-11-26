@@ -12,6 +12,13 @@
 | Find Cluster Mode and Median（分布式众数 / 中位数，base + FU1） | `src/clustermode/{base,fu1}/Cluster.java` | [problems/cluster-mode-median.md](problems/cluster-mode-median.md) |
 | Repair Bootloader Program（修复引导程序，base + FU1） | `src/bootloader/{base,fu1}/Solution.java` | [problems/bootloader.md](problems/bootloader.md) |
 
+## Multithreading practice
+
+Separate practice area for the P01–P09 multithreading exercises (extra work, not bank
+questions): see [multithread/](multithread/). Each exercise has its own starter (only the
+method signature — you write the implementation) and tests. Run them from inside
+`multithread/` with `./run-tests.sh` (macOS / Linux) or `.\run-tests.ps1` (Windows).
+
 ## 目录结构
 
 ```
@@ -33,6 +40,7 @@ coding-questions/
 ├── problems/                # 题面、思路、题目里没说清楚的地方
 ├── run-tests.sh             # macOS / Linux
 ├── run-tests.ps1            # Windows PowerShell
+├── multithread/             # multithreading practice (P01–P09), see multithread/README.md
 └── .vscode/                 # VS Code 配置（源码路径 + 运行配置）
 ```
 
