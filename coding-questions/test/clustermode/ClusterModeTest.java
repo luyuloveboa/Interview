@@ -28,12 +28,20 @@ public class ClusterModeTest {
         mode("winner is spread over every worker", new int[]{7, 1, 7, 2, 7, 3, 7, 4}, 4, 7);
         int[] big = randomArray(new Random(3), 200_000, 5_000);
         mode("200k values on 200 workers", big, 200, directMode(big));
+
+        // network usage: one batched message per (sender, owner) pair, then one report per worker
+        int k = 10;
+        clustermode.base.Cluster c = new clustermode.base.Cluster(list(randomArray(new Random(6), 10_000, 100)), k);
+        Check.eq("mode network usage: k*k + k messages", () -> {
+            c.findMode();
+            return c.messagesSent();
+        }, (long) k * k + k);
     }
 
     static void fu1() {
         Check.section("Cluster mode: FU1 (findMedian)");
         Check.eq("findMode still works: ex",
-                () -> new clustermode.fu1.Cluster(new int[]{1, 2, 2, 3, 3, 3, 4, 4, 4, 4}, 3).findMode(), 4);
+                () -> new clustermode.fu1.Cluster(list(new int[]{1, 2, 2, 3, 3, 3, 4, 4, 4, 4}), 3).findMode(), 4);
         median("ex", new int[]{1, 3, 5}, 2, 3.0);
         median("even count -> average of the two middles", new int[]{4, 1, 3, 2}, 3, 2.5);
         median("single value", new int[]{-3}, 1, -3.0);
@@ -48,7 +56,7 @@ public class ClusterModeTest {
 
         // network usage: ~31 binary-search rounds, a couple of tiny messages per worker per round
         int k = 10;
-        clustermode.fu1.Cluster c = new clustermode.fu1.Cluster(randomArray(new Random(5), 10_000, 2_000_000_000), k);
+        clustermode.fu1.Cluster c = new clustermode.fu1.Cluster(list(randomArray(new Random(5), 10_000, 2_000_000_000)), k);
         Check.eq("median network usage", () -> {
             c.findMedian();
             long msgs = c.messagesSent();
@@ -58,12 +66,12 @@ public class ClusterModeTest {
 
     static void mode(String name, int[] data, int k, int expected) {
         Check.eq(name + ": findMode(" + show(data) + ", k=" + k + ")",
-                () -> new clustermode.base.Cluster(data, k).findMode(), expected);
+                () -> new clustermode.base.Cluster(list(data), k).findMode(), expected);
     }
 
     static void median(String name, int[] data, int k, double expected) {
         Check.eq(name + ": findMedian(" + show(data) + ", k=" + k + ")",
-                () -> new clustermode.fu1.Cluster(data, k).findMedian(), expected);
+                () -> new clustermode.fu1.Cluster(list(data), k).findMedian(), expected);
     }
 
     /** Random datasets (sometimes many repeats, sometimes the full value range) vs direct computation. */
@@ -77,11 +85,11 @@ public class ClusterModeTest {
             int n = 1 + rnd.nextInt(200), k = 1 + rnd.nextInt(20);
             int[] a = rnd.nextBoolean() ? randomArray(rnd, n, 1 + rnd.nextInt(50)) : randomArray(rnd, n, 2_000_000_000);
             compare(0, mismatches, first, "base findMode(" + show(a) + ", k=" + k + ")",
-                    () -> new clustermode.base.Cluster(a, k).findMode(), directMode(a));
+                    () -> new clustermode.base.Cluster(list(a), k).findMode(), directMode(a));
             compare(1, mismatches, first, "FU1 findMode(" + show(a) + ", k=" + k + ")",
-                    () -> new clustermode.fu1.Cluster(a, k).findMode(), directMode(a));
+                    () -> new clustermode.fu1.Cluster(list(a), k).findMode(), directMode(a));
             compare(2, mismatches, first, "FU1 findMedian(" + show(a) + ", k=" + k + ")",
-                    () -> new clustermode.fu1.Cluster(a, k).findMedian(), directMedian(a));
+                    () -> new clustermode.fu1.Cluster(list(a), k).findMedian(), directMedian(a));
         }
         String[] names = {"base: random findMode", "FU1: random findMode", "FU1: random findMedian"};
         for (int v = 0; v < 3; v++) {
@@ -124,6 +132,12 @@ public class ClusterModeTest {
         int[] a = new int[n];
         for (int i = 0; i < n; i++) a[i] = (int) (rnd.nextInt(spread) - spread / 2L);
         return a;
+    }
+
+    static List<Integer> list(int[] a) {
+        List<Integer> res = new ArrayList<>(a.length);
+        for (int v : a) res.add(v);
+        return res;
     }
 
     static String show(int[] a) {
