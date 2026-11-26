@@ -1,0 +1,12 @@
+# System design
+
+Step-by-step designs: short requirements, API and data model, then a baseline high-level design and one deep dive per step. Each step redraws the full diagram; new or changed parts are outlined in orange.
+
+| Design | Core requirements | Steps | Files |
+|---|---|---|---|
+| [Payment system](payment/README.md) | 1. Merchant creates a payment intent<br>2. Customer pays it by card (3DS if needed)<br>3. Check a payment's status<br>4. List transaction history | 8 | [Markdown](payment/README.md) · [PDF](payment/payment.pdf) |
+| [ChatGPT](chatgpt/README.md) | 1. Users should be able to send a prompt in a chat and receive an AI-generated response<br>2. Users should be able to view past chats and resume a conversation, with the chat's prior context carried into the prompt | 7 | [Markdown](chatgpt/README.md) · [PDF](chatgpt/chatgpt.pdf) |
+| [Google Docs](google-docs/README.md) | 1. Users should be able to create new documents<br>2. Multiple users should be able to edit the same document concurrently<br>3. Users should be able to view each other's changes in real time<br>4. Users should be able to see the cursor position and presence of other users | 7 | [Markdown](google-docs/README.md) · [PDF](google-docs/google-docs.pdf) |
+| [Ticketmaster](ticketmaster/README.md) | 1. Users should be able to view events<br>2. Users should be able to search for events<br>3. Users should be able to book tickets to events | 6 | [Markdown](ticketmaster/README.md) · [PDF](ticketmaster/ticketmaster.pdf) |
+| [Online Chess](online-chess/README.md) | 1. Players should be able to find an opponent through skill-based matchmaking and start a game<br>2. Players should be able to play a game in real time<br>3. Players should be able to view a global leaderboard and see their own rank, both updating shortly after games finish | 6 | [Markdown](online-chess/README.md) · [PDF](online-chess/online-chess.pdf) |
+| [Metrics Monitoring](metrics-monitoring/README.md) | 1. The platform should be able to ingest metrics (CPU, memory, latency, custom counters) from services<br>2. Users should be able to query and visualize metrics on dashboards with filters, aggregations and time ranges<br>3. Users should be able to define alert rules with thresholds over time windows (e.g. "alert if p99 latency > 500 ms for 5 minutes")<br>4. Users should receive notifications when alerts fire (email, Slack, PagerDuty) | 7 | [Markdown](metrics-monitoring/README.md) · [PDF](metrics-monitoring/metrics-monitoring.pdf) |
