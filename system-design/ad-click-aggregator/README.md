@@ -126,8 +126,8 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 
 - When an ad is shown, the ad server (out of scope) creates a unique impression_id and signs (impression_id, ad_id, expires_at) with HMAC; the click URL carries them
 - Click service checks the signature and expiry. Every click is still redirected and published, with valid = false and a reason when the signature is bad, the impression expired, or the ad doesn't match
-- Dedup is its own Flink stage keyed by impression_id, before counting: the first click of an impression counts, in its own minute; repeats are marked invalid. Seen ids stay in state for 24 h (\~1B ids, in RocksDB), and signatures expire within that time
-- Bot filters run in Flink too: known bot user agents and data-center IPs inline, and bursts per IP in a stage keyed by IP that flags clicks before they're counted
+- Bot filters run first, before dedup: known bot user agents and data-center IPs inline, then bursts per IP in a stage keyed by IP (a burst is only recognised once it crosses the threshold in its window, so its first clicks can still pass; Spark's recount applies burst rules over the whole hour and re-picks the first valid click, and its answer wins)
+- Dedup is its own Flink stage keyed by impression_id, after the bot filters: the first *valid* click of an impression counts, in its own minute; later valid repeats are marked invalid. A click already flagged (bot, bad signature) never claims the impression, so a bot click arriving first can't push out the real one. Seen ids stay in state for 24 h (\~1B ids, in RocksDB), and signatures expire within that time
 - Spark applies the same rules and loads the previous 24 h of impression ids when it recounts an hour. Where arrival order and event time pick a different "first" click, the difference is alerted and Spark's answer wins
 - Counts and charts use valid clicks; invalid ones are counted separately for review
 
@@ -146,7 +146,7 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 **Changed:** two-stage counting in Flink; caches on both ends
 
 - Sizing: one Kafka partition takes \~10 MB/s (\~20k small messages/s) and one Flink task tens of thousands of events/s, so even all 10k clicks/s on one ad fits today. Two-stage counting is the plan for 10× growth
-- Kafka is keyed by impression_id (DD1), so a hot ad is already spread across all partitions, and repeats of one impression still meet in one partition for dedup
+- Kafka is keyed by impression_id (DD1), so a hot ad is already spread across all partitions; dedup gets an impression's repeats together by re-keying on impression_id after the bot stage
 - This replaces DD1's single count keyed by ad_id (after DD3's dedup). Stage 1, keyed by (ad_id, minute, hash(impression_id) mod P) with a fixed P, emits cumulative counts; stage 2, keyed by ad_id, keeps the latest per sub-key and sums them, so rescaling Flink changes nothing and replays are harmless. Stage 2 sees at most P small records per window, not every click, so a viral ad never overloads one task
 - There's still one row per ad and minute in the OLAP store
 - Click service is stateless behind a load balancer and autoscales; the redirect target comes from a cached ad_id → URL map, loaded from the ad server's catalog (out of scope, not drawn); Query service checks ad ownership against the same catalog

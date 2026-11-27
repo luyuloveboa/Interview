@@ -39,9 +39,10 @@ Out of scope: processing the text (e.g. training), non-text data (images, video)
 
 **Used by the deep dives**
 
-- **host** (Redis, DD2): URL queue, next_allowed, robots rules, crawl delay, pages crawled
+- **host** (Redis, DD2): URL queue, next_allowed, robots rules, crawl delay, resolved IP, pages crawled
+- **ip** (Redis, DD2): next_allowed
 - **seen URLs** (Bloom filter in Redis, DD3): normalized URL → probably seen
-- **content** (DD3): content_hash PK → owner url_hash, status, text location (first writer wins)
+- **content** (DD3): content_hash PK → owner url_hash, status, claimed_at, text location (first writer wins)
 
 ## Part 2 · Design, step by step
 
@@ -102,7 +103,7 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 
 - The frontier is sharded by hash(host). Each shard keeps a short FIFO of URLs per host (a bounded head; the rest wait as queued rows in the URL DB and are refilled from that index by host) and a sorted set of hosts by next_allowed; a crawler asking for work gets a URL from a host whose time has come (a Lua script: ZRANGEBYSCORE score ≤ now, then ZREM), as a lease
 - After each fetch, next_allowed = now + delay (default 1 s, or the site's crawl-delay; longer after 429 / 503 or slow answers). No crawler ever holds a URL it can't fetch yet
-- Limits apply per hostname and per resolved IP: a next_allowed key per IP in one small shared Redis is checked at lease time, so thousands of subdomains on one server farm don't add up to a flood
+- Limits apply per hostname and per resolved IP: a next_allowed key per IP, kept in the frontier store (on the shard for that IP), is checked at lease time (not atomic with the host lease; politeness tolerates that; a host whose IP isn't due goes back in the ready set at the IP's next_allowed; a new host's first fetch, robots.txt, is exempt until its IP comes back with the ack), so thousands of subdomains on one server farm don't add up to a flood
 - robots.txt: a new host's first URL is its robots.txt; the crawler returns the rules and the host's resolved IP with its ack (for the per-IP limit), they're cached in Redis (TTL \~1 day) and checked again at lease time, and disallowed URLs are marked skipped (a final status, so they leave the unfinished index) as they enter the host queue. 4xx → allow all; 5xx or timeout → treat as disallowed and retry later (RFC 9309)
 - This Redis frontier replaces SQS. A lease not acked within a few minutes returns to its host queue; a failed fetch goes into a per-shard sorted set by retry time (30 s, 2 min, 10 min) and back into its host queue when due, with attempt + 1. The crawler identifies itself (User-Agent with a contact URL)
 
@@ -122,7 +123,7 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 
 - Normalize every link: lowercase the host, drop fragments, default ports and tracking parameters, sort query parameters; drop binary extensions (.jpg, .pdf, .zip)
 - Seen check: a Bloom filter in Redis as a fast prefilter, sized for discovered URLs: \~50B at 0.1% false positives ≈ 90 GB, sharded; the \~0.1% of new URLs it wrongly skips is accepted (sized for 10B it would overfill and silently drop most new URLs). The conditional put on url_hash stays the truth: put the row (queued), then add to the Bloom filter
-- Content dedup: first a conditional put on content_hash in a separate table, pending and owned by this url_hash (first writer wins); only the winner appends the text and then records its location. A re-parse by the owner resumes its own pending row. A duplicate's URL row just points to the existing text. Near-duplicates (SimHash) are left to the training pipeline
+- Content dedup: first a conditional put on content_hash in a separate table, pending and owned by this url_hash (first writer wins); only the winner appends the text and then records its location (stored). A parser that finds another URL's row still pending leaves its parse message to retry later and finishes only once the row is stored, then just points its URL row to that text. A pending row older than \~15 min (its owner crashed or gave up) is taken over by the next parser with that hash (conditional on the old owner); a sparse index on pending content rows (by claimed_at) lets the sweeper find any left over and re-send a parse message for the owner URL
 - Traps: depth ≤ \~20 from the seed, a maximum URL length, a page cap per host (host state counts pages; URLs over it are marked skipped) and dropping links with repeating path segments
 
 **Why a Bloom filter:** it answers \~1M checks/s from memory; only new URLs reach DynamoDB

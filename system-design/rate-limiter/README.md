@@ -129,10 +129,10 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 
 **Problem:** the limiter sits in front of every request; if Redis is down, the API must not go down with it
 
-**Changed:** each shard gets a replica with automatic failover; each rule has a failure mode
+**Changed:** each shard gets a replica with automatic failover; each rule has a failure mode; the load balancer sends each client key to a preferred pair of gateways
 
 - Each primary has a replica in another zone. Redis Cluster promotes it after its node timeout plus an election (\~10–20 s unless tuned); the circuit breaker and local limiter below cover that gap. Asynchronous replication may lose a few seconds of counts, which is fine
-- Fail open (most rules): if Redis doesn't answer within \~5 ms, use a local in-memory bucket per gateway with capacity max(2 × limit / N, a few tokens) and refill of 2 × limit / N per window, so traffic keeps flowing and abuse stays roughly bounded even when there are hundreds of gateways
+- Fail open (most rules): if Redis doesn't answer within \~5 ms, use a local in-memory bucket per gateway. For this, the L7 load balancer now hashes each request on its primary client key (user_id or API key from the token; the IP for anonymous traffic) to a preferred pair of gateways, spilling elsewhere only on overload. Rules on that key get limit / 2 locally (capacity and refill, no floor), so a client stays at about its limit however many gateways there are; rules on other keys (an IP rule for logged-in traffic) aren't enforced during the outage, since their traffic is spread over all gateways and a limit / N slice would reject almost everything; hot keys that spill can exceed their limit during an outage
 - Fail closed (sensitive endpoints such as login and password reset): reject with 503, because a brute-force attack costs more than a short outage there
 - A circuit breaker stops calling a dead shard for a few seconds, so timeouts don't pile up
 

@@ -35,6 +35,7 @@ Out of scope: editing files, viewing files without downloading them
 - GET /files/{id}/versions/{v}/download-urls?chunks= → signed URLs, \~100 at a time
 - POST /files/{id}/shares {user_ids, role} · GET /shared-with-me?cursor=
 - GET /changes?cursors= → changes, new cursors (sync) · WebSocket /notifications
+- GET /namespaces → the user's member namespaces and mount paths · GET /namespaces/{id}/files?cursor= → live files (file_id, path, latest_version), paged, plus the seq the listing started at (first sync, or after a cursor reset)
 
 **Below the line**
 
@@ -56,7 +57,7 @@ Auth: user session on every call; upload and download URLs are short-lived and s
 - **chunk**: (namespace_id, hash) PK → S3 key (indexed), size, codec (none / zstd), stored size, ref_count, state (pending / stored), created_at, unreferenced_since (indexed); **chunk ref**: (namespace_id, hash, file_id, version), written at /complete and removed with the version, for GC's point checks
 - **change log**: (namespace_id, seq) PK → file_id, op, version, target namespace_id (for added / removed / moved); **file location** (key-value, sharded by file_id): file_id → namespace_id
 - **member**: (namespace_id, user_id) PK, role, mount path; a copy keyed (user_id, namespace_id). A root namespace's only member is its owner; DD5 adds shared ones
-- **device cursor** (on the device): last seq per namespace, local chunk hashes per file
+- **device state** (on the device): last seq per namespace; per file: file_id → local path, synced version, chunk hashes
 
 ## Part 2 · Design, step by step
 
@@ -149,13 +150,13 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 - The client watches the folder (FSEvents / inotify) and uploads local edits (DD1, DD4). It keeps a cursor per namespace it can see; sync = GET /changes?cursors=…, then fetch each changed file's chunk list (GET …/versions/{v}) and download only the chunks it lacks
 - No polling: devices keep a WebSocket to the Notification service (\~250M at peak; \~1M per node → \~300 nodes). Registry (Redis): namespace → members, user → devices, device → node; devices register on connect, member changes arrive via CDC. CDC → Kafka (keyed by namespace) → the node reading that partition finds the members' devices and forwards "namespace changed" to their nodes; offline devices catch up from cursors
 - Conflicts: /complete does a compare-and-set (UPDATE file SET latest_version = new WHERE latest_version = based_on_version), and UNIQUE (namespace_id, parent_id, name) catches two new files or renames with one name. The loser is kept as "name (conflicted copy, Laptop)", so no edit is lost
-- The log keeps \~30 days; an older cursor gets "reset", and the device re-lists the namespace and compares hashes
+- The log keeps \~30 days; an older cursor gets "reset": the device re-lists with GET /namespaces/{id}/files (noting its start seq), fetches chunk lists only where latest_version differs, deletes local files not listed (unsynced edits become conflicted copies), then resumes /changes from that seq. A root reset also re-reads GET /namespaces for added or revoked shares
 
 **Why a cursor plus a push hint:** a push can be lost or arrive twice safely; the cursor is the source of truth, and devices also call /changes on every (re)connect and every \~10 min
 
 **When things fail:**
 
-- Notification service down → devices fall back to polling /changes every \~60 s; nothing is missed
+- Notification service down → devices poll /changes every \~60 s; nothing is missed
 - A shard's primary fails → its synchronous standby takes over (no committed version lost); that shard's writes pause briefly while downloads continue
 
 ### Step 4 · DD4 Upload only what changed
@@ -194,7 +195,7 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 - A background job moves the item one file at a time: mark it moving (commits get a retryable error), copy its rows, flip its file location entry and drop the cache, and log "moved to namespace X" so devices keep their local copies; members see the folder fill in. Chunks change owner without copying: the new namespace's row takes the same S3 key and the old row is dropped. Only chunks still used by files left behind are server-side copied, so each namespace's GC deletes only its own objects; file_ids never change
 - The member row is written with an outbox row; File service's relay applies it on the recipient's shard: the reverse row (user_id, namespace_id) for "shared with me", and "namespace added" in the recipient's own change log, so their devices add a cursor and get its pushes (DD3). Unsharing does the same with "removed". Replays are harmless; lag is seconds
 - Big shared folders (a whole company): push hints carry the namespace's latest seq and are coalesced per device and namespace (at most one every few seconds, with jitter); /changes reads the log's recent tail from a replica that has reached that seq (else the primary), so one edit doesn't send \~60k reads to the primary at once
-- File service checks membership for reads (/changes, version chunk lists, download URLs) and the editor role for writes (new versions, upload URLs, rename, delete); URLs live minutes, so revoking takes effect quickly
+- File service checks membership for reads (/changes, namespace listings, version chunk lists, download URLs) and the editor role for writes (new versions, upload URLs, rename, delete); URLs live minutes, so revoking takes effect quickly
 
 **Why short-lived URLs instead of proxying:** S3 and the CDN move the bytes, while we keep the access decision (TLS in transit, KMS-encrypted at rest)
 
