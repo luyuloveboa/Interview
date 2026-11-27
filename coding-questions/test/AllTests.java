@@ -19,6 +19,8 @@ public class AllTests {
         SUITES.put("Bootloader", bootloader.BootloaderTest::run);
         SUITES.put("Duplicate files", duplicatefiles.DuplicateFilesTest::run);
         SUITES.put("Banking system", bankingsystem.BankingSystemTest::run);
+        SUITES.put("In-memory DB", inmemorydb.InMemoryDBTest::run);
+        SUITES.put("Profiler events", profilerevents.ProfilerEventsTest::run);
     }
 
     public static void main(String[] args) throws Exception {
