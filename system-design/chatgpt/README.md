@@ -2,7 +2,7 @@
 
 Whiteboard (Claude artifact): https://claude.ai/artifact/8ptdpGaCZLAaqZXrkmoVXW · PDF: [chatgpt.pdf](chatgpt.pdf)
 
-> Decouple generation from the connection; queue GPUs by priority
+> Part 2 · Design: decouple generation from the connection; queue GPUs by priority
 
 ## Part 1 · Requirements, API and data model
 
@@ -205,20 +205,19 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 **Added:** Moderation (input), Output guard (output), deletion in Async workers
 
 - Ownership: the API gateway turns the JWT into a user_id; Chat service checks conversation.user_id on every read and write (the gateway can't know who owns what); streams are protected by the stream token (DD1)
-- Input: Moderation checks the message synchronously before it goes to the GPU
-- Output: the GPU worker streams raw text to Output guard instead of the buffer. The guard releases text in small steps — the first \~16 tokens with a fast classifier, then every \~32 tokens — and each check sees the previous \~200 tokens, so content split across steps is still caught. This adds \~0.2–0.4 s before the first text. The buffer's chunks are now these release steps, not 50 ms chunks
+- Input: Moderation checks the message synchronously before it goes to the GPU; a flagged message gets a policy refusal, releases the reservation and marks the dedupe row `rejected`
+- Output: the GPU worker streams raw text to Output guard instead of the buffer. The guard releases text in small steps — the first \~20 tokens with a fast classifier, then every \~32 tokens (each step 20–50 tokens) — and each check sees the previous \~200 tokens, so content split across steps is still caught. This adds \~0.4–0.5 s before the first text (within the < 1 s goal). The buffer's chunks are now these release steps, not 50 ms chunks
 - The guard returns the approved offset; the worker saves checkpoints and the final reply only up to it, so the DB never holds unchecked text. Guard writes carry the worker's epoch and pass the same epoch check (DD6)
 - On a violation the guard stops the generation and writes a `stopped` event; the reply is cut at the approved offset
 - Output options: check each chunk before sending it (ours: small delay, nothing unchecked shown) or stream first and pull the message back later (no delay, but it may already be read; low-risk only)
 - Sizing: \~1.5 checks per stream per second → \~450k checks/s at peak, batched on GPU classifiers
-- Delete: set a deleted flag so it disappears at once; Async workers then purge Cassandra, Redis, S3 and analytics data. Usage events carry no content, so they can stay
-- Encryption at rest; no chat content in logs; training opt-out honoured
+- Delete: set a deleted flag so it disappears at once; Async workers then purge Cassandra, Redis, S3 and analytics data. Usage events (no content) stay
 
-**Why separate services:** moderation models and rules change often; they deploy and scale on their own GPUs without touching chat logic
+**Why separate services:** moderation changes often and scales on its own GPUs, apart from chat logic. Encryption at rest; no chat content in logs
 
 **When things fail:**
 
-- Input moderation times out → fail closed for high-risk requests; let normal ones through and check them asynchronously
+- Input moderation down → a smaller on-host classifier before the GPU; if that fails, refuse "try again": reservation released, dedupe row left retryable
 - A guard node dies → the worker resends from the last approved offset to another guard node; the guard keeps no other state
 - Guard overloaded → hold the stream rather than release unchecked text; after a few seconds end the reply with an error
 - Delete task fails → it retries until it succeeds (SQS in DD6)

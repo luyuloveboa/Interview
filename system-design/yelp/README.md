@@ -2,7 +2,7 @@
 
 Whiteboard (Claude artifact): https://claude.ai/artifact/NkDw7TktPLDhWVxTKPpK3c · PDF: [yelp.pdf](yelp.pdf)
 
-> Search in Elasticsearch; review and rating in one Postgres transaction
+> Part 2 · Design: search in Elasticsearch; review and rating in one Postgres transaction
 
 ## Part 1 · Requirements, API and data model
 

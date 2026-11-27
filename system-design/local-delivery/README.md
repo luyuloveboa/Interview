@@ -2,7 +2,7 @@
 
 Whiteboard (Claude artifact): https://claude.ai/artifact/BP1ppCHabdJpkw1UZdU59K · PDF: [local-delivery.pdf](local-delivery.pdf)
 
-> Precomputed reachability for fast reads; one transaction per order
+> Part 2 · Design: precomputed reachability for fast reads; one transaction per order
 
 ## Part 1 · Requirements, API and data model
 
@@ -26,8 +26,8 @@ Out of scope: payments, driver routing and deliveries, search and catalog APIs, 
 
 **Core**
 
-- GET /availability?lat=&long=&item_ids= → [{item_id, quantity}], summed over the DCs that can deliver within 1 hour
-- POST /orders {lat, long, items: [{item_id, qty}]} + Idempotency-Key → order_id, status, dc_ids; or 409 with the items that ran out
+- GET /availability?lat=&long=&item_ids= → [{item_id, quantity}], summed over the DCs that can deliver within 1 hour; region (DD4)
+- POST /orders {lat, long, items: [{item_id, qty}]} + Idempotency-Key (region:uuid, region from the availability response) → order_id, status, dc_ids; 409 with the items that ran out; 422 if the address moved out of that region
 
 **Below the line**
 
@@ -131,7 +131,7 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 **Changed:** Order service places the whole order in one transaction on the primary
 
 - First, look up (customer_id, Idempotency-Key): if that order exists, return it; nothing else runs
-- Candidate DCs = the reachable DCs for the delivery cell, nearest first
+- Candidate DCs = the reachable DCs for the delivery cell, nearest first. If the cell's region isn't the key's region (a drifted retry), skip planning and go straight to the transaction, which returns the existing order or the 422 (DD4)
 - Plan: read their current stock from the primary, without locks. Prefer one DC that has every item; otherwise split across the fewest DCs (each part is its own delivery)
 - Commit in one transaction: insert the order row first (UNIQUE (customer_id, key), so a concurrent duplicate waits here and then returns the stored order without touching stock); then, in (dc_id, item_id) order to avoid deadlocks, UPDATE inventory SET quantity = quantity − q WHERE dc_id = ? AND item_id = ? AND quantity >= q for each planned row; then insert the lines
 - An update that matches 0 rows (someone just took that stock) → roll back, re-plan with fresh numbers (up to \~3 tries). 409 only when the candidate DCs together are short, listing those items
@@ -153,7 +153,8 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 - Regions are a fixed split by metro. Each cell belongs to exactly one region, and only that region's DCs serve it, for both availability and ordering, so what customers see matches what they can order
 - Trade-off: a border cell ignores a reachable DC across the border; borders run through sparse areas, so this is rare
 - The Reachability job keeps only the cell's own region's DCs before taking the nearest \~10; Nearby DC service returns the region with the DC list; Availability and Order services route to that shard, so an order's transaction stays on one shard
-- order_id starts with the region, so GET /orders/{id} finds the shard; a retry carries the same location, so it reaches the same shard and finds its Idempotency-Key
+- Retries route by key, not by location: GPS drift could carry a retry across a border. The availability response names the region; the client makes its Idempotency-Key region:uuid and reuses it on every retry, so all retries reach the same shard, which returns the existing order if the key is there. The region check runs inside the transaction, after the order-row insert (DD3), so a retry racing an in-flight attempt waits on the UNIQUE key and gets that order. Only a genuinely new order is checked: if the delivery cell no longer belongs to the region, it's refused with 422 "region changed" and the client re-checks availability, so an order is never placed twice. No availability call yet → the client asks for one before ordering
+- order_id starts with the region, so GET /orders/{id} finds the shard
 - Each shard: a primary, two standbys with quorum commit (an order is confirmed only once a standby has it, and losing one standby blocks nothing), and read replicas
 - The item catalog is small and global, so it's replicated to every region
 

@@ -2,7 +2,7 @@
 
 Whiteboard (Claude artifact): https://claude.ai/artifact/FBE1wf3292vaAq12v5iMCY · PDF: [bitly.pdf](bitly.pdf)
 
-> Unique codes from a counter; redirects served from cache and CDN
+> Part 2 · Design: unique codes from a counter; redirects served from cache and CDN
 
 ## Part 1 · Requirements, API and data model
 

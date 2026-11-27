@@ -2,7 +2,7 @@
 
 Whiteboard (Claude artifact): https://claude.ai/artifact/TXa4VNNU1AaDdFwq3RdtSq · PDF: [ticketmaster.pdf](ticketmaster.pdf)
 
-> Browse and search favor availability; booking favors consistency
+> Part 2 · Design: browse and search favor availability; booking favors consistency
 
 ## Part 1 · Requirements, API and data model
 
@@ -33,7 +33,7 @@ Out of scope: resale and transfers, refunds, dynamic pricing, recommendations, v
 - GET /events/{id} → event, venue, performers, price tiers (view an event)
 - GET /events/search?q=&city=&near=&from=&to=&category=&cursor= → events, next_cursor (search)
 - GET /events/{id}/seats → seats left per section + seat map (available / held / sold)
-- POST /bookings/hold {event_id, seat_ids or section + count} + Idempotency-Key → booking_id, seats, expires_at (10 min)
+- POST /bookings/hold {event_id, seat_ids or section + count} + Idempotency-Key → booking_id, seats, expires_at (15 min)
 - POST /bookings/{booking_id}/confirm {payment_token} → status (confirmed / pending / failed)
 - GET /bookings/{booking_id} → status, tickets (e.g. after a payment timeout)
 
@@ -50,7 +50,7 @@ Auth: user session; hold and confirm need a logged-in user (and, for hot events,
 - **event**: event_id PK, venue_id FK, performer_ids, name, category, start_time, on_sale_at, price_tiers, status
 - **venue**: venue_id PK, name, city, geo, seat map (sections, rows, seats)
 - **ticket**: (event_id, seat_id) PK, section, price_tier, status (available / held / sold), booking_id, hold_expires_at
-- **booking**: (event_id, booking_id) PK, user_id FK, seat_ids, total, status (held / paying / confirmed / failed / expired), expires_at, idempotency_key UNIQUE, payment_id
+- **booking**: (event_id, booking_id) PK, user_id FK, seat_ids, total, status (held / paying / confirmed / failed / expired), expires_at, idempotency_key UNIQUE, payment_id, payment_status (none / authorized / captured / voided)
 
 **Used by the deep dives**
 
@@ -96,21 +96,19 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 
 **Added:** two-phase booking (hold, then confirm), with a booking row created at hold time
 
-- Hold: in one transaction, insert a booking (status held, user_id, expires_at = now + 10 min, the request's Idempotency-Key) and UPDATE the tickets to `held` with that booking_id, only where they're `available` or their hold has expired. If fewer rows change than seats asked for, roll back: all seats or none
-- Confirm: only the booking's own user can confirm. The booking moves to `paying` and its holds are extended past the payment provider's timeout (+ margin), so they can't expire mid-charge
-- Charge with booking_id as the provider's idempotency key, so a retried confirm never charges twice; on success, in one transaction: tickets → `sold`, booking → `confirmed`
-- An expired hold is simply an available seat: the next hold's condition takes it, so correctness needs no cleanup job (a sweeper only marks old bookings expired and refreshes the seat map)
-- Times come from the database clock (now()), not app servers
+- Hold: in one transaction, insert a booking (held, expires_at = now + 15 min by the DB clock, Idempotency-Key) and UPDATE the tickets to `held` only where they're `available` or their hold expired. Fewer rows than seats asked → roll back. Walking away just lets the hold expire
+- Confirm: only the booking's own user can confirm. A booking already `confirmed` returns its result at once; otherwise it moves held|paying → `paying` (conditional) and its holds are extended past the payment provider's timeout (+ margin), so they can't expire mid-payment
+- 1. Authorize the card (funds reserved, nothing captured), key booking_id:auth, so a retried confirm never authorizes twice; payment_status = authorized
+- 2. One conditional write: tickets → `sold` and booking → `confirmed`, WHERE the tickets are held by, or already sold to, this booking AND the booking is `paying` or already `confirmed` (a retry passes, a failed booking can't). 3. Capture (key booking_id:capture) → payment_status = captured
+- The write matches 0 rows or times out → a conditional write moves the booking paying → failed; only if it matched is the authorization voided (booking_id:void). If it didn't, re-read: capture only if the booking is `confirmed`; if it is already `failed`, whoever failed it voids.
+- A reconciler captures confirmed bookings still `authorized`; for a stale `paying` one it first moves it to `failed` (conditional write), then voids; it also voids any failed or expired booking still `authorized`
 
-**Why not a lock during payment:** a transaction or row lock held for minutes blocks everyone and dies with the connection
-
-**Why Postgres, not a Redis lock:** one source of truth; a Redis lock plus a DB write can disagree after a failover. \~1k bookings/s is easy for Postgres
+**Why no lock during payment:** a lock held for minutes blocks everyone; a Redis lock could disagree with the DB after a failover. \~1k bookings/s is easy for Postgres
 
 **When things fail:**
 
-- Payment times out → booking stays `paying`; the provider's webhook or a status lookup by idempotency key settles it; the client polls GET /bookings/{id}
-- Paid but the hold was lost anyway (bug) → automatic refund + alert; never sell the seat twice
-- User closes the tab → the hold expires after 10 min
+- Payment times out → booking stays `paying`; the webhook or a status lookup by idempotency key tells whether the authorization exists. If it does, continue at step 2 (its failure path voids); if not, mark the booking failed. The client polls GET /bookings/{id}
+- Capture fails after the seats are sold → the reconciler retries it with the same key; still failing near the authorization's expiry → alert for manual handling, seats stay sold
 
 ### Step 2 · DD2 Fast search: add Elasticsearch, CDC
 
@@ -195,7 +193,7 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 **Changed:** Booking DB sharded by event_id; seats picked without waiting on locks
 
 - Tickets and bookings of an event live on the same shard (booking key (event_id, booking_id)), so hold and confirm stay one local transaction. Sharding isolates events: one hot on-sale doesn't slow the others
-- \~2k holds/s on one event fits one Postgres primary when transactions are tiny: hold = one INSERT + one conditional UPDATE, sale = one UPDATE; the payment call happens outside any transaction
+- \~2k holds/s on one event fits one Postgres primary when transactions are tiny: hold = one INSERT + one conditional UPDATE, sale = one conditional write (tickets + booking); the payment call happens outside any transaction
 - Best available: users ask for "2 seats in section 102"; Booking service picks a block of adjacent free seats from the seat states in Redis and conditionally UPDATEs exactly those rows; if any is taken, it tries the next block. No request waits on another's lock
 - Users who pick an exact seat on the map get an instant "taken" from the seat states if it's held — no retries against the DB
 - GET /bookings/{id} goes straight to the right shard (booking_id encodes event_id); "my bookings" is a per-user index fed by CDC (line not drawn)

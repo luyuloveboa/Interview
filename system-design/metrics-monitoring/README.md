@@ -2,7 +2,7 @@
 
 Whiteboard (Claude artifact): https://claude.ai/artifact/3U95BdrEaZKc1cm77NhsJH · PDF: [metrics-monitoring.pdf](metrics-monitoring.pdf)
 
-> Kafka buffers ingest; recent data from the TSDB, long ranges from S3 rollups
+> Part 2 · Design: Kafka buffers ingest; recent data from the TSDB, long ranges from S3 rollups
 
 ## Part 1 · Requirements, API and data model
 
@@ -31,7 +31,7 @@ Out of scope: logs and traces, anomaly detection, deploying agents, billing
 
 **Core**
 
-- POST /v1/metrics (batched, compressed) [{name, type, labels {service, host, …}, timestamp, value}] → 202 once Kafka has stored it (agents push)
+- POST /v1/metrics (batched, compressed) [{name, type, labels {service, host, …}, timestamp, value}] → 202 once Kafka has stored the accepted points; series over the tenant's quota are listed as refused in the response (or the whole batch gets 429 when the tenant is over its rate), and agents don't retry refused series (agents push)
 - GET /v1/query?q=&start=&end=&step= → series [{labels, points}], e.g. p99 latency by region: histogram_quantile(0.99, sum by (region, le) (rate(latency_bucket[5m])))
 - POST /v1/alerts {name, query, condition "> 500", for "5m", severity, channel_ids} → alert_id
 - POST /v1/channels {type: email | slack | pagerduty, target} → channel_id
@@ -100,10 +100,11 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 **Added:** Kafka between ingestion and storage
 
 - Agents (OpenTelemetry Collector or Prometheus agent) batch \~5 s of points, compress them and send with retries; a local disk buffer covers short outages
-- Ingestion service is stateless behind a load balancer: checks the API key, validates, applies per-tenant rate limits and produces to Kafka. It answers 202 only after Kafka has the batch on all replicas (acks=all), so an agent never drops points that weren't stored
+- Ingestion service is stateless behind a load balancer: checks the API key, validates, applies per-tenant rate and series limits and produces to Kafka. It answers 202 only after Kafka has the batch on all replicas (acks=all), so an agent never drops points that weren't stored
 - The topic is partitioned by series_id (hash of name + sorted labels), so each series stays in order in one partition. \~250 MB/s (5M × \~50 bytes) → a few hundred partitions
 - TSDB shards consume their partitions. Kafka absorbs bursts and lets them replay after a crash (retention \~24 h)
-- Cardinality guard: a label like user_id would create millions of series. TSDB shards, which know which series exist, count active series per tenant and reject new ones over the quota
+- Cardinality guard, before the 202: a label like user_id would create millions of series. TSDB shards publish per tenant a Bloom filter of active series and a count (line not drawn); Ingestion uses the filter, plus a local set of series it admitted since the last publish, to tell existing series from new ones, and each instance admits new series only from its share of the tenant's remaining headroom, under a per-tenant cap on attempted new series per second (admitted or refused); batches beyond it get 429, so even a runaway label can only leak cap × the false-positive rate. New series over the quota are refused: the rest of the batch is stored and acked, the refused series are named in the response and the agent stops sending them, so the tenant knows exactly what was cut
+- TSDB shards keep a hard limit set with a margin above the quota (sized for that cap × the false-positive rate) as a backstop (Ingestion's view is seconds old); the rare point they still refuse after an ack is counted, shown on a dropped-samples metric and alerted to the tenant, never dropped silently
 
 **Why Kafka:** a durable buffer that decouples ingest from storage
 
@@ -151,7 +152,7 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 - The Compactor merges small blocks and writes 5-minute and 1-hour rollups per series (min, max, sum, count, last). Built from blocks, where retries are already de-duplicated, so nothing is counted twice
 - Resolution follows the range: < 1 day raw, < 1 week 5-minute, longer 1-hour → a 4-week chart reads \~670 points per series instead of \~240k
 - Percentiles: latency is sent as histogram bucket counters, so p99 by region = histogram_quantile over the summed bucket rates. Bucket counts add up across hosts and time; averaging each host's p99 would be wrong
-- The API service splits a query by time bucket and caches finished buckets in Redis. Buckets inside the late-data window (\~1 h) aren't cached, because late points can still change them
+- The API service splits a query by time bucket and caches finished buckets in Redis. Buckets inside the late-data window (\~1 h) aren't cached, because late points can still change them; when an older backlog is compacted in, the cached buckets for that tenant and time range are invalidated
 - Guardrails: max series per query, timeouts and per-user concurrency
 - Retention: 5-minute rollups 90 days, 1-hour rollups 2 years
 
@@ -194,15 +195,15 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 **Changed:** the TSDB, the Compactor and the Alert evaluators all allow for lateness
 
 - Points are stored by the time they were measured, not when they arrived
-- The TSDB accepts out-of-order points within \~1 h: each series has a small out-of-order buffer merged when the block is cut; older points go to separate out-of-order blocks (or are rejected, by policy)
+- The TSDB accepts out-of-order points within \~1 h: each series has a small out-of-order buffer merged when the block is cut; older points go to separate out-of-order blocks
 - Duplicates from retries (same series, same timestamp): the TSDB keeps the first sample and drops the copy, so a resend is harmless
 - The Compactor builds rollups only after the late window has passed, merging the out-of-order blocks first, so rollups use complete data
 - Alerts evaluate a window that ends \~15 s ago, so most stragglers are counted; the "for 5 min" condition smooths the rest
-- Timestamps more than \~10 min in the future are rejected as clock skew
+- Ingestion checks timestamps before the 202: more than \~10 min in the future (clock skew) or older than the retention window → listed as refused in the response, never dropped after an ack
 
 **The trade-off:** waiting longer gives more complete data but slower alerts; 15 s keeps the alert budget under a minute
 
-**When things fail:** an agent offline for hours sends a backlog → accepted into out-of-order blocks (or dropped past the limit); the next compaction rebuilds the rollups for those hours
+**When things fail:** an agent offline for hours sends a backlog → accepted into out-of-order blocks; the next compaction rebuilds the rollups for those hours
 
 ### Step 6 · DD6 Notifications: queue, claim → send → mark
 

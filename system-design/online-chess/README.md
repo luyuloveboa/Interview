@@ -2,7 +2,7 @@
 
 Whiteboard (Claude artifact): https://claude.ai/artifact/2XwH7NSzQJZGWCB8qW3Hkx · PDF: [online-chess.pdf](online-chess.pdf)
 
-> One server owns each game and its clock; everything else is eventually consistent
+> Part 2 · Design: one server owns each game and its clock; everything else is eventually consistent
 
 ## Part 1 · Requirements, API and data model
 

@@ -2,7 +2,7 @@
 
 Whiteboard (Claude artifact): https://claude.ai/artifact/PvhQkQdU4qGNcRxAGi3SbA · PDF: [payment.pdf](payment.pdf)
 
-> Start simple; each deep dive adds components
+> Part 2 · Design: start simple; each deep dive adds components
 
 ## Part 1 · Requirements, API and data model
 

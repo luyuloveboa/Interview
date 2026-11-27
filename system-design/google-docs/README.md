@@ -2,7 +2,7 @@
 
 Whiteboard (Claude artifact): https://claude.ai/artifact/AuAX59w3oKBiZGb5Gni12j · PDF: [google-docs.pdf](google-docs.pdf)
 
-> One sequencer per doc orders every edit; clients apply their own edits instantly
+> Part 2 · Design: one sequencer per doc orders every edit; clients apply their own edits instantly
 
 ## Part 1 · Requirements, API and data model
 
@@ -56,8 +56,8 @@ Auth: user session for HTTP; the WebSocket uses the short-lived doc_token (never
 
 **Used by the deep dives**
 
-- **doc_head** (DynamoDB, beside the op log): doc_id → latest_rev, snapshot_rev
-- **doc_owner** (etcd): doc_id → collab server, lease, epoch
+- **doc_head** (DynamoDB, beside the op log): doc_id → latest_rev, snapshot_rev, epoch
+- **shard map** (etcd): \~16k shards; shard → collab server, epoch; one lease per server, not per doc
 - **presence** (Redis, TTL 30 s): doc_id → {user_id, color, cursor, last_seen}
 - **client_seq**: (doc_id, client_id) → last applied seq, for dedupe
 
@@ -116,21 +116,22 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 
 **Problem:** OT needs one place that orders a doc's edits, but there are thousands of Collaboration servers and connections land anywhere
 
-**Added:** WebSocket gateway, Doc ownership in etcd
+**Added:** WebSocket gateway, a shard map in etcd
 
 - Each open doc is owned by exactly one Collaboration server, which keeps it in memory and orders all its edits
-- Ownership is a lease in etcd: doc_id → server, epoch. The WebSocket gateway looks up the owner and routes every connection for that doc to it; consistent hashing picks the first owner
-- One server easily handles a doc with 100 editors and holds tens of thousands of docs; idle docs' leases move to rebalance load
-- Fencing: every op-log write is conditional on rev = last + 1, so a server that lost its lease (GC pause, network split) can't append
+- Ownership is by shard: hash(doc_id) picks one of \~16k shards, and etcd holds only shard → server (with an epoch per shard) plus one lease per server. Per-doc keys would mean \~5M leases and a Raft write per open and close
+- The WebSocket gateway watches the shard map, caches it, and routes every connection for a doc to its shard's server
+- One server easily handles a doc with 100 editors and owns many shards (tens of thousands of open docs); rebalancing moves whole shards: the shard is first marked as moving with a new epoch; the old owner sees it (or fails to renew its lease), closes that shard's connections and stops serving it; only then does the map name the new owner, and it loads each doc when clients reconnect. Servers refuse docs from shards they don't hold
+- Fencing: every op-log write is conditional on rev = last + 1 and on the shard epoch stored in doc_head being ≤ the writer's, so a server that lost its shard (GC pause, network split) can't append once the new owner has written; until then the rev condition keeps each doc's order. The controller sets a shard's epoch once, at assignment, as (failover generation, counter), so epochs only rise, also after a region failover; servers never derive it on load
 
-**Why etcd:** a small, strongly consistent key-value store with leases and watches; ZooKeeper would also work. One key per open doc
+**Why etcd:** small, strongly consistent, with leases and watches; the map is tiny and changes only when servers join, leave or rebalance. ZooKeeper would also work
 
 **Why a separate WebSocket gateway:** long-lived connections need sticky routing by doc, and survive Collaboration server restarts by reconnecting to the new owner
 
 **When things fail:**
 
-- Collaboration server dies → its leases expire (\~5 s); the next connection makes another server take the lease, load snapshot + recent ops and continue. Clients resend unacknowledged ops (DD5)
-- etcd unavailable → current owners keep serving their docs; only opening a doc with no owner waits
+- Collaboration server dies → its one lease expires (\~5 s) and a controller (leader-elected through etcd, not drawn) reassigns its shards with new epochs; the new owner loads snapshot + recent ops when clients reconnect. Clients resend unacknowledged ops (DD5)
+- etcd unavailable → gateways keep routing with their cached map and owners keep serving; only reassigning shards waits
 
 ### Step 3 · DD3 Storage: add snapshots, Snapshot worker, Kafka
 
@@ -143,7 +144,7 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 **Added:** Op log in DynamoDB, Snapshot worker + Snapshot store (S3), Kafka for other consumers
 
 - Order for every op: transform and apply it in memory, write it to the op log, and only then ack the sender and broadcast it to everyone else. Nobody sees an op that isn't stored
-- The write is a conditional put on key (doc_id, rev): "this rev doesn't exist yet", so ordering and fencing come from the DB
+- The write is one DynamoDB transaction: put the op at key (doc_id, rev) only if that rev doesn't exist yet, and update doc_head (latest_rev, epoch) only if latest_rev = rev − 1 and epoch ≤ the writer's (a group commit puts several ops in the same transaction), so ordering and fencing come from the DB
 - Group commit: ops for one doc within \~10 ms go in one write, cutting writes several-fold at the same latency
 - Every \~1,000 ops, or when a doc goes idle, the Snapshot worker reads the previous snapshot + the ops since, writes the new full document to S3 and records snapshot_rev in the doc's head item. Opening a doc = latest snapshot + ops after it
 - Ops stay in the op log for \~30 days (long-offline clients need them, DD5), then move to S3 Standard-IA, still readable; snapshots kept over time give version history
