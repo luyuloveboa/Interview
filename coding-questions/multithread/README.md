@@ -8,18 +8,21 @@ tests, and move on only when they are all green.
 | Exercise | Code | Statement |
 |---|---|---|
 | P01 — Parallel Array Sum (Easy) | `src/parallelsum/base/ParallelSum.java` | [problems/p01-parallel-sum.md](problems/p01-parallel-sum.md) |
+| P02 — Parallel Squares with CountDownLatch (Easy) | `src/parallelsquares/base/ParallelSquares.java` | [problems/p02-parallel-squares.md](problems/p02-parallel-squares.md) |
 
-More exercises (P02–P09) are added one at a time, in the same shape.
+More exercises (P03–P09) are added one at a time, in the same shape.
 
 ## Layout
 
 ```
 multithread/
 ├── src/                     # starters, one package per exercise
-│   └── parallelsum/base/
+│   ├── parallelsum/base/
+│   └── parallelsquares/base/
 ├── test/                    # tests (only JDK needed, no JUnit / Maven)
 │   ├── AllTests.java        # entry point: runs every suite
 │   ├── parallelsum/ParallelSumTest.java
+│   ├── parallelsquares/ParallelSquaresTest.java
 │   └── testutil/Check.java  # assertion helper (copy of coding-questions/test/testutil/Check.java)
 ├── problems/                # statements, in English
 ├── run-tests.sh             # macOS / Linux
@@ -31,7 +34,9 @@ The tests include, for each exercise:
 - every example from the statement;
 - cases aimed at the easy-to-make bugs (for P01: a shared `long` updated without
   synchronization, returning before all futures complete, a missing `shutdown()`,
-  uneven splits dropping elements);
+  uneven splits dropping elements; for P02: returning before `latch.await()`,
+  `countDown()` outside `finally`, a missing `shutdown()`, uneven splits
+  dropping elements);
 - random datasets compared against a direct sequential computation.
 
 ## Running in VS Code
@@ -60,7 +65,7 @@ The tests include, for each exercise:
 All tests pass when the last line is:
 
 ```
-ALL PASSED (10 checks)
+ALL PASSED (20 checks)
 ```
 
 A failure prints `FAIL <name>: got ..., expected ...` and the exit code is 1.

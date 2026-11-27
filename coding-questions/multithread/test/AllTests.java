@@ -8,11 +8,13 @@ import testutil.Check;
  *
  *   java -cp out AllTests                 all suites
  *   java -cp out AllTests "Parallel sum"  one suite, in this JVM
+ *   java -cp out AllTests "Parallel squares"  one suite, in this JVM
  */
 public class AllTests {
     static final Map<String, Runnable> SUITES = new LinkedHashMap<>();
     static {
         SUITES.put("Parallel sum", parallelsum.ParallelSumTest::run);
+        SUITES.put("Parallel squares", parallelsquares.ParallelSquaresTest::run);
     }
 
     public static void main(String[] args) throws Exception {
