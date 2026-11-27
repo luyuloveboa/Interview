@@ -1,6 +1,6 @@
 # coding-questions
 
-七道带 follow-up 的面试题，Java 实现。每道题的每个 follow-up 都在上一个版本的基础上改，
+九道带 follow-up 的面试题，Java 实现。每道题的每个 follow-up 都在上一个版本的基础上改，
 新增 / 改动的代码用注释标出来：`// [FU2 NEW]`、`// [FU2 CHANGED]`。
 对比相邻两个版本，就能看到这一步到底改了什么。
 
@@ -13,6 +13,8 @@
 | Repair Bootloader Program（修复引导程序，base + FU1） | `src/bootloader/{base,fu1}/Solution.java` | [problems/bootloader.md](problems/bootloader.md) |
 | Find Duplicate Files（找重复文件，base + FU1） | `src/duplicatefiles/{base,fu1}/DuplicateFileFinder.java` | [problems/duplicate-files.md](problems/duplicate-files.md) |
 | Design Banking System（银行系统，base + FU1–FU3） | `src/bankingsystem/{base,fu1,fu2,fu3}/BankingSystem.java` | [problems/banking-system.md](problems/banking-system.md) |
+| Design In-memory Database with Backup（带 TTL 和备份的内存数据库，base + FU1–FU3） | `src/inmemorydb/{base,fu1,fu2,fu3}/InMemoryDB.java` | [problems/in-memory-db.md](problems/in-memory-db.md) |
+| Generate Function Profiling Events（采样 profiler 事件，base + FU1–FU2） | `src/profilerevents/{base,fu1,fu2}/Solution.java` | [problems/profiler-events.md](problems/profiler-events.md) |
 
 ## Multithreading practice
 
@@ -32,7 +34,9 @@ coding-questions/
 │   ├── clustermode/base, fu1/
 │   ├── bootloader/base, fu1/
 │   ├── duplicatefiles/base, fu1/   (+ FileSystem.java：模拟的文件系统)
-│   └── bankingsystem/base … fu3/
+│   ├── bankingsystem/base … fu3/
+│   ├── inmemorydb/base … fu3/
+│   └── profilerevents/base … fu2/
 ├── test/                    # 测试（只依赖 JDK，不需要 JUnit / Maven）
 │   ├── AllTests.java        # 跑全部测试的入口
 │   ├── plantdisease/PlantDiseaseTest.java
@@ -42,6 +46,8 @@ coding-questions/
 │   ├── bootloader/BootloaderTest.java
 │   ├── duplicatefiles/DuplicateFilesTest.java
 │   ├── bankingsystem/BankingSystemTest.java
+│   ├── inmemorydb/InMemoryDBTest.java
+│   ├── profilerevents/ProfilerEventsTest.java
 │   └── testutil/Check.java
 ├── problems/                # 题面、思路、题目里没说清楚的地方
 ├── run-tests.sh             # macOS / Linux
@@ -58,7 +64,9 @@ coding-questions/
   分布式众数 / 中位数跟直接在整个数组上算的结果比；
   引导程序跟"把每一条 jump/next 都翻转试一遍"的暴力解比；
   重复文件跟"直接按内容字符串分组"比；
-  银行系统跟一个"每步都存一份所有账户余额快照"的朴素实现比。
+  银行系统跟一个"每步都存一份所有账户余额快照"的朴素实现比；
+  内存数据库跟一个"所有字段放一个列表线性扫、备份整份拷贝"的朴素实现比；
+  profiler 事件跟"每条路径用字符串当 key、用集合差算事件"的暴力解比。
 
 ## 在 VS Code 里运行
 
@@ -85,7 +93,7 @@ coding-questions/
 全部通过时最后一行是：
 
 ```
-ALL PASSED (368 checks)
+ALL PASSED (522 checks)
 ```
 
 有失败的话会打印 `FAIL <名字>: got ..., expected ...`，退出码为 1。
