@@ -125,5 +125,5 @@ From `coding-questions/multithread/`:
 ```
 
 Or open `coding-questions/multithread/` in VS Code and run the "All tests" launch
-configuration. All tests pass when the last line is `ALL PASSED (20 checks)`
-(10 for P01, 10 for P02).
+configuration. All tests pass when the last line is `ALL PASSED (102 checks)`
+(10 for P01, 10 for P02, 11 for P03, 10 for P04, 12 for P05, 10 for P06, 10 for P07, 15 for P08, 14 for P09).

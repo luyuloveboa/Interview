@@ -9,8 +9,13 @@ tests, and move on only when they are all green.
 |---|---|---|
 | P01 — Parallel Array Sum (Easy) | `src/parallelsum/base/ParallelSum.java` | [problems/p01-parallel-sum.md](problems/p01-parallel-sum.md) |
 | P02 — Parallel Squares with CountDownLatch (Easy) | `src/parallelsquares/base/ParallelSquares.java` | [problems/p02-parallel-squares.md](problems/p02-parallel-squares.md) |
-
-More exercises (P03–P09) are added one at a time, in the same shape.
+| P03 — Parallel Unique URL Processor (Medium) | `src/uniqueurl/base/UniqueUrlProcessor.java` | [problems/p03-unique-url-processor.md](problems/p03-unique-url-processor.md) |
+| P04 — BlockingQueue Task Pipeline (Medium) | `src/taskpipeline/base/TaskPipeline.java` | [problems/p04-task-pipeline.md](problems/p04-task-pipeline.md) |
+| P05 — ThreadSafeCache with ReadWriteLock (Medium) | `src/cache/base/ThreadSafeCache.java` | [problems/p05-thread-safe-cache.md](problems/p05-thread-safe-cache.md) |
+| P06 — BoundedBuffer with wait/notify (Hard) | `src/boundedbuffer/base/BoundedBuffer.java` | [problems/p06-bounded-buffer.md](problems/p06-bounded-buffer.md) |
+| P07 — ConnectionPool with Semaphore (Medium) | `src/connectionpool/base/ConnectionPool.java` | [problems/p07-connection-pool.md](problems/p07-connection-pool.md) |
+| P08 — Parallel Range Counter with ForkJoinPool (Medium) | `src/rangecounter/base/RangeCounter.java` | [problems/p08-range-counter.md](problems/p08-range-counter.md) |
+| P09 — Dynamic Task Tree with Phaser (Medium) | `src/tasktree/base/TaskTree.java` | [problems/p09-dynamic-task-tree.md](problems/p09-dynamic-task-tree.md) |
 
 ## Layout
 
@@ -18,11 +23,25 @@ More exercises (P03–P09) are added one at a time, in the same shape.
 multithread/
 ├── src/                     # starters, one package per exercise
 │   ├── parallelsum/base/
-│   └── parallelsquares/base/
+│   ├── parallelsquares/base/
+│   ├── uniqueurl/base/
+│   ├── taskpipeline/base/
+│   ├── cache/base/
+│   ├── boundedbuffer/base/
+│   ├── connectionpool/base/
+│   ├── rangecounter/base/
+│   └── tasktree/base/
 ├── test/                    # tests (only JDK needed, no JUnit / Maven)
 │   ├── AllTests.java        # entry point: runs every suite
 │   ├── parallelsum/ParallelSumTest.java
 │   ├── parallelsquares/ParallelSquaresTest.java
+│   ├── uniqueurl/UniqueUrlProcessorTest.java
+│   ├── taskpipeline/TaskPipelineTest.java
+│   ├── cache/ThreadSafeCacheTest.java
+│   ├── boundedbuffer/BoundedBufferTest.java
+│   ├── connectionpool/ConnectionPoolTest.java
+│   ├── rangecounter/RangeCounterTest.java
+│   ├── tasktree/TaskTreeTest.java
 │   └── testutil/Check.java  # assertion helper (copy of coding-questions/test/testutil/Check.java)
 ├── problems/                # statements, in English
 ├── run-tests.sh             # macOS / Linux
@@ -36,7 +55,14 @@ The tests include, for each exercise:
   synchronization, returning before all futures complete, a missing `shutdown()`,
   uneven splits dropping elements; for P02: returning before `latch.await()`,
   `countDown()` outside `finally`, a missing `shutdown()`, uneven splits
-  dropping elements);
+  dropping elements; for P03: two-step contains-then-add instead of an atomic
+  claim, a missing `shutdown()`; for P04: a missing poison pill, a queue
+  capacity that deadlocks the producer; for P05: an unsynchronized map, a write
+  lock held for reads; for P06: `if` instead of `while` around `wait()`,
+  `notify()` instead of `notifyAll()`; for P07: a bare `Semaphore` that lets a
+  double release create an extra permit, releasing an unknown id; for P08:
+  `fork()` without `join()`, counting without splitting; for P09: registering
+  with the `Phaser` after submitting the task, a non-atomic claim);
 - random datasets compared against a direct sequential computation.
 
 ## Running in VS Code
@@ -65,7 +91,7 @@ The tests include, for each exercise:
 All tests pass when the last line is:
 
 ```
-ALL PASSED (20 checks)
+ALL PASSED (102 checks)
 ```
 
 A failure prints `FAIL <name>: got ..., expected ...` and the exit code is 1.

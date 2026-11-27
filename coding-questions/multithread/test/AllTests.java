@@ -9,12 +9,26 @@ import testutil.Check;
  *   java -cp out AllTests                 all suites
  *   java -cp out AllTests "Parallel sum"  one suite, in this JVM
  *   java -cp out AllTests "Parallel squares"  one suite, in this JVM
+ *   java -cp out AllTests "Unique URL processor"  one suite, in this JVM
+ *   java -cp out AllTests "Task pipeline"  one suite, in this JVM
+ *   java -cp out AllTests "Thread-safe cache"  one suite, in this JVM
+ *   java -cp out AllTests "Bounded buffer"  one suite, in this JVM
+ *   java -cp out AllTests "Connection pool"  one suite, in this JVM
+ *   java -cp out AllTests "Range counter"  one suite, in this JVM
+ *   java -cp out AllTests "Dynamic task tree"  one suite, in this JVM
  */
 public class AllTests {
     static final Map<String, Runnable> SUITES = new LinkedHashMap<>();
     static {
         SUITES.put("Parallel sum", parallelsum.ParallelSumTest::run);
         SUITES.put("Parallel squares", parallelsquares.ParallelSquaresTest::run);
+        SUITES.put("Unique URL processor", uniqueurl.UniqueUrlProcessorTest::run);
+        SUITES.put("Task pipeline", taskpipeline.TaskPipelineTest::run);
+        SUITES.put("Thread-safe cache", cache.ThreadSafeCacheTest::run);
+        SUITES.put("Bounded buffer", boundedbuffer.BoundedBufferTest::run);
+        SUITES.put("Connection pool", connectionpool.ConnectionPoolTest::run);
+        SUITES.put("Range counter", rangecounter.RangeCounterTest::run);
+        SUITES.put("Dynamic task tree", tasktree.TaskTreeTest::run);
     }
 
     public static void main(String[] args) throws Exception {
