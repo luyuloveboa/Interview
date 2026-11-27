@@ -17,6 +17,8 @@ public class AllTests {
         SUITES.put("Rectangle board", rectangleboard.RectangleBoardTest::run);
         SUITES.put("Cluster mode", clustermode.ClusterModeTest::run);
         SUITES.put("Bootloader", bootloader.BootloaderTest::run);
+        SUITES.put("Duplicate files", duplicatefiles.DuplicateFilesTest::run);
+        SUITES.put("Banking system", bankingsystem.BankingSystemTest::run);
     }
 
     public static void main(String[] args) throws Exception {

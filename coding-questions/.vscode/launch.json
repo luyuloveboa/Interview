@@ -6,6 +6,8 @@
     { "type": "java", "name": "GPU credit tests", "request": "launch", "mainClass": "gpucredit.CreditSystemTest" },
     { "type": "java", "name": "Rectangle board tests", "request": "launch", "mainClass": "rectangleboard.RectangleBoardTest" },
     { "type": "java", "name": "Cluster mode tests", "request": "launch", "mainClass": "clustermode.ClusterModeTest" },
-    { "type": "java", "name": "Bootloader tests", "request": "launch", "mainClass": "bootloader.BootloaderTest" }
+    { "type": "java", "name": "Bootloader tests", "request": "launch", "mainClass": "bootloader.BootloaderTest" },
+    { "type": "java", "name": "Duplicate files tests", "request": "launch", "mainClass": "duplicatefiles.DuplicateFilesTest" },
+    { "type": "java", "name": "Banking system tests", "request": "launch", "mainClass": "bankingsystem.BankingSystemTest" }
   ]
 }
