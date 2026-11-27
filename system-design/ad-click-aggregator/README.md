@@ -126,8 +126,8 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 
 - When an ad is shown, the ad server (out of scope) creates a unique impression_id and signs (impression_id, ad_id, expires_at) with HMAC; the click URL carries them
 - Click service checks the signature and expiry. Every click is still redirected and published, with valid = false and a reason when the signature is bad, the impression expired, or the ad doesn't match
-- Dedup is its own Flink stage keyed by impression_id, after the validity and bot checks and before counting: only a click that passed validation and is not flagged as a bot may claim the slot. The first such click of an impression counts, in its own minute; repeats are marked invalid. Invalid and bot clicks are counted separately and never touch seen-state. Seen ids stay in state for 24 h (\~1B ids, in RocksDB), and signatures expire within that time
-- Bot filters run in Flink too, before dedup: known bot user agents and data-center IPs inline, and bursts per IP in a stage keyed by IP that flags clicks before they can claim a slot
+- Dedup is its own Flink stage keyed by impression_id, before counting: the first click of an impression counts, in its own minute; repeats are marked invalid. Seen ids stay in state for 24 h (\~1B ids, in RocksDB), and signatures expire within that time
+- Bot filters run in Flink too: known bot user agents and data-center IPs inline, and bursts per IP in a stage keyed by IP that flags clicks before they're counted
 - Spark applies the same rules and loads the previous 24 h of impression ids when it recounts an hour. Where arrival order and event time pick a different "first" click, the difference is alerted and Spark's answer wins
 - Counts and charts use valid clicks; invalid ones are counted separately for review
 

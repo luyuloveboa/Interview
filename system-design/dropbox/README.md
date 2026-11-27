@@ -32,7 +32,6 @@ Out of scope: editing files, viewing files without downloading them
 - POST /files {name, parent_id, size, chunk_hashes} · POST /files/{id}/versions {chunk_hashes, based_on_version} → version (new file or new version)
 - POST /files/{id}/versions/{v}/upload-urls {chunks: [hash, sent_sha256]} → presigned PUTs for the next \~100 missing chunks · POST …/complete
 - GET /files/{id} → metadata · GET /files/{id}/versions/{v} → ordered chunk hashes and sizes
-- GET /namespaces/{id}/files?cursor= → one page of the namespace (file_id, name, latest_version), for the reset / re-list fallback
 - GET /files/{id}/versions/{v}/download-urls?chunks= → signed URLs, \~100 at a time
 - POST /files/{id}/shares {user_ids, role} · GET /shared-with-me?cursor=
 - GET /changes?cursors= → changes, new cursors (sync) · WebSocket /notifications
@@ -150,7 +149,7 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 - The client watches the folder (FSEvents / inotify) and uploads local edits (DD1, DD4). It keeps a cursor per namespace it can see; sync = GET /changes?cursors=…, then fetch each changed file's chunk list (GET …/versions/{v}) and download only the chunks it lacks
 - No polling: devices keep a WebSocket to the Notification service (\~250M at peak; \~1M per node → \~300 nodes). Registry (Redis): namespace → members, user → devices, device → node; devices register on connect, member changes arrive via CDC. CDC → Kafka (keyed by namespace) → the node reading that partition finds the members' devices and forwards "namespace changed" to their nodes; offline devices catch up from cursors
 - Conflicts: /complete does a compare-and-set (UPDATE file SET latest_version = new WHERE latest_version = based_on_version), and UNIQUE (namespace_id, parent_id, name) catches two new files or renames with one name. The loser is kept as "name (conflicted copy, Laptop)", so no edit is lost
-- The log keeps \~30 days; an older cursor gets "reset", and the device re-lists the namespace (GET /namespaces/{id}/files, paged) and compares hashes
+- The log keeps \~30 days; an older cursor gets "reset", and the device re-lists the namespace and compares hashes
 
 **Why a cursor plus a push hint:** a push can be lost or arrive twice safely; the cursor is the source of truth, and devices also call /changes on every (re)connect and every \~10 min
 
