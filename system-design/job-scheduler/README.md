@@ -43,7 +43,7 @@ Auth: user session; tasks are registered ahead of time by developers
 **Core**
 
 - **task**: task_id PK, name, handler (code loaded by a worker pool), timeout, max_attempts
-- **job**: job_id PK, user_id, task_id, schedule (a time or a cron expression + time zone), params, idempotency_key, created_at
+- **job**: job_id PK, user_id, task_id, schedule (a time or a cron expression + time zone), params, idempotency_key, created_at; GSI (user_id, idempotency_key) → job_id, so a retried POST /jobs finds the already-created job instead of creating a second one
 - **execution** (one run of a job): execution_id = hash(job_id, scheduled_time), job_id, user_id, scheduled_time, status (pending / queued / running / succeeded / failed), attempt, next_attempt_at, lease_expires_at, last_error, started_at, finished_at
 
 **Used by the deep dives**
@@ -88,7 +88,7 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 **Changed:** jobs and executions are separate; executions are stored by time bucket (DynamoDB)
 
 - A job is the definition; an execution is one run, with id = hash(job_id, scheduled_time), so the same run can never be inserted twice (attribute_not_exists)
-- Creating a job writes the job and its first execution (plus, for a recurring job, the second) in one TransactWriteItems. For a recurring job, the next execution (cron evaluated in the job's time zone, DST included) is inserted with its own idempotent put (attribute_not_exists) before the current one is sent, separate from the status mark, so a worker that already claimed the run can't block it
+- Creating a job first looks up (user_id, idempotency_key) on the GSI — a retried POST returns the existing job_id instead of creating a second job — then writes the job and its first execution (plus, for a recurring job, the second) in one TransactWriteItems. For a recurring job, the next execution (cron evaluated in the job's time zone, DST included) is inserted with its own idempotent put (attribute_not_exists) before the current one is sent, separate from the status mark, so a worker that already claimed the run can't block it
 - Executions are keyed by time: PK = hour bucket, SK = scheduled_time#execution_id, so "due in the next 5 minutes" is a range read on one or two partitions
 - GSIs: (user_id#n, scheduled_time) for "my jobs" (write-sharded n = 0–9 so a big tenant's burst at :00 spreads out; queried in parallel) and (job_id, scheduled_time) for one job's runs; both project status, so status filters work on the index (each status change also writes the GSIs, costed in DD4). A sparse GSI keyed by the DD4 shard (0–99) holds only unfinished executions (pending / queued / running), for overdue and stuck-run checks without scanning old buckets
 - An execution's key never changes; every SQS message carries the full key (bucket, scheduled_time, execution_id) and the attempt, so workers update it directly. Status changes are conditional writes (only from the expected status). An execution's TTL (\~30 days) is set when it finishes, so future runs never expire
