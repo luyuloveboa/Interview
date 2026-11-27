@@ -132,7 +132,7 @@ Each step redraws the whole diagram. Blue = our services, white = external, circ
 **Changed:** each shard gets a replica with automatic failover; each rule has a failure mode
 
 - Each primary has a replica in another zone. Redis Cluster promotes it after its node timeout plus an election (\~10–20 s unless tuned); the circuit breaker and local limiter below cover that gap. Asynchronous replication may lose a few seconds of counts, which is fine
-- Fail open (most rules): if Redis doesn't answer within \~5 ms, use a local in-memory bucket per gateway with capacity max(2 × limit / N, a few tokens) and refill of 2 × limit / N per window, so traffic keeps flowing and abuse stays roughly bounded even when there are hundreds of gateways
+- Fail open (most rules): if Redis doesn't answer within \~5 ms, use a local in-memory bucket per gateway with capacity ceil(2 × limit / N) and refill of 2 × limit / N per window, and no absolute floor: the worst-case aggregate burst across N gateways is then ~2 × limit, not N × the floor. For small limits some gateways hold 0–1 token — that is the price of keeping the over-limit bound honest. (E.g. a 100 req/min rule over 300 gateways bursts at most ~200/min in aggregate, instead of 900–1,500 with a 3–5 token floor.)
 - Fail closed (sensitive endpoints such as login and password reset): reject with 503, because a brute-force attack costs more than a short outage there
 - A circuit breaker stops calling a dead shard for a few seconds, so timeouts don't pile up
 
